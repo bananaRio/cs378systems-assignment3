@@ -9,6 +9,10 @@ title: "Assignment 3: LLM Serving with Vidur"
 * (The list will be replaced with the table of contents.)
 {:toc}
 
+### Preparation
+
+**Get the skeleton code.** Create a private repository from the [template](https://github.com/utcs378/assignment3-template){:target="_blank"} (**Use this template > Create a new repository**, select **Private**).
+
 ### Part 0: Overview and Setup
 
 #### Overview
