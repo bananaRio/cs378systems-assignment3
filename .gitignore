@@ -21,3 +21,5 @@ htmlcov/
 # Notebook and OS clutter
 .ipynb_checkpoints/
 .DS_Store
+cache/
+simulator_output/
