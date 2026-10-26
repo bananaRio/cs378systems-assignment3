@@ -101,7 +101,12 @@ class SarathiReplicaScheduler(BaseReplicaScheduler):
         # which can be negative (then 0).
         # Use: request.is_prefill_complete, request.num_prefill_tokens,
         # request.num_processed_tokens, self._config.chunk_size, num_batch_tokens.
-        raise NotImplementedError("Part 3: fill _get_request_next_num_tokens")
+        if request.is_prefill_complete:
+            return 1
+
+        remaining_prompt = request.num_prefill_tokens - request.num_processed_tokens
+        budget_left = self._config.chunk_size - num_batch_tokens
+        return max(0, min(remaining_prompt, budget_left))
         # END OF YOUR CODE
 
     def _reserve_kv_or_preempt(self, request: Request) -> bool:
@@ -148,7 +153,20 @@ class SarathiReplicaScheduler(BaseReplicaScheduler):
             the tokens _get_request_next_num_tokens gives (one).
         """
         # [Part 3] TODO: step 1.
-        raise NotImplementedError("Part 3: fill _add_running_decodes")
+        prompts = []
+        while self._preempted_requests and len(batch) < self._max_micro_batch_size:
+            request = self._preempted_requests.pop(0)
+
+            if not request.is_prefill_complete:
+                prompts.append(request)
+                continue
+
+            if not self._reserve_kv_or_preempt(request):
+                continue
+
+            num_tokens = self._get_request_next_num_tokens(request, False, batch.total_tokens)
+            batch.add(request, num_tokens)
+        return prompts
         # END OF YOUR CODE
 
     def _add_unfinished_prompts(
@@ -160,7 +178,14 @@ class SarathiReplicaScheduler(BaseReplicaScheduler):
         in order, to keep for the next iteration.
         """
         # [Part 3] TODO: step 2.
-        raise NotImplementedError("Part 3: fill _add_unfinished_prompts")
+        kept = []
+        for request in prompts:
+            num_tokens = self._get_request_next_num_tokens(request, False, batch.total_tokens)
+            if num_tokens == 0:
+                kept.append(request)
+            else:
+                batch.add(request, num_tokens)
+        return kept
         # END OF YOUR CODE
 
     def _return_kept_prompts(self, kept: List[Request]) -> None:
@@ -169,7 +194,8 @@ class SarathiReplicaScheduler(BaseReplicaScheduler):
         sort it by request.arrived_at.
         """
         # [Part 3] TODO: step 3.
-        raise NotImplementedError("Part 3: fill _return_kept_prompts")
+        self._preempted_requests = kept + self._preempted_requests
+        self._preempted_requests.sort(key=lambda r: r.arrived_at)
         # END OF YOUR CODE
 
     def _add_new_requests(self, batch: BatchInProgress) -> None:
@@ -183,7 +209,24 @@ class SarathiReplicaScheduler(BaseReplicaScheduler):
         self._allocate_request(request), and add it with its tokens.
         """
         # [Part 3] TODO: step 4.
-        raise NotImplementedError("Part 3: fill _add_new_requests")
+        while self._request_queue:
+            if len(self._allocation_map) == self._config.batch_size_cap:
+                break
+            if len(batch) == self._max_micro_batch_size:
+                break
+
+            request = self._request_queue[0]
+
+            if not self._can_allocate_request(request):
+                break
+
+            num_tokens = self._get_request_next_num_tokens(request, False, batch.total_tokens)
+            if num_tokens == 0:
+                break
+
+            self._request_queue.pop(0)
+            self._allocate_request(request)
+            batch.add(request, num_tokens)
         # END OF YOUR CODE
 
     def _order_waiting_queue(self) -> None:
